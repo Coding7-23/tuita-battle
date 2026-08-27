@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>투타 배틀</title>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#10233d;color:#fff;text-align:center}
+.wrap{max-width:900px;margin:auto;padding:18px}
+h1{margin:8px 0 4px}.sub{opacity:.8}
+.card{background:#183657;border-radius:18px;padding:18px;margin:14px 0}
+button{border:0;border-radius:12px;padding:12px 18px;margin:5px;font-size:16px;cursor:pointer}
+button:hover{filter:brightness(1.1)}
+.mode button{font-size:18px}
+.hidden{display:none}
+.players{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:650px){.players{grid-template-columns:1fr}}
+.role{font-size:18px;font-weight:bold;padding:10px;border-radius:10px;background:#24496c}
+.score{font-size:25px;font-weight:bold}
+.field{position:relative;height:360px;max-width:600px;margin:15px auto;background:#4b8d45;border-radius:50% 50% 18px 18px}
+.diamond{position:absolute;width:150px;height:150px;border:4px solid #eee;transform:rotate(45deg);left:calc(50% - 75px);top:95px}
+.base{position:absolute;background:#fff;color:#111;width:24px;height:24px;line-height:24px;font-weight:bold}
+.home{left:calc(50% - 12px);top:270px}.first{left:calc(50% + 84px);top:174px}.second{left:calc(50% - 12px);top:78px}.third{left:calc(50% - 108px);top:174px}
+.pitchzone{width:270px;height:210px;border:3px solid #fff;margin:15px auto;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr)}
+.zone{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:0}
+.log{min-height:28px;font-size:18px}
+#meter{height:22px;background:#26364b;border-radius:12px;overflow:hidden;max-width:420px;margin:12px auto}
+#meterbar{height:100%;width:0;background:#fff}
+.small{font-size:14px;opacity:.75}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>⚾ 투타 배틀</h1>
+<div class="sub">2인 대결 또는 봇과 대결</div>
+
+<div id="menu" class="card mode">
+<h2>👥 2인 플레이</h2>
+<p>같은 화면에서 1P는 투수, 2P는 타자를 조작합니다.</p>
+<p>공수 교대 후 역할도 자동으로 바뀝니다.</p>
+<h2>📖 게임 설명 & 하는 법</h2>
+<p>⚾ 투수: 구종을 고르고 9칸 중 원하는 곳을 누르면 공을 던집니다.</p>
+<p>🏏 타자: 날아오는 공을 보고 <b>스윙</b> 또는 <b>강타</b>를 누르세요.</p>
+<p>🏃 주자: 주자가 있으면 <b>도루</b>를 눌러 다음 베이스를 노릴 수 있습니다.</p>
+<p>🎯 스트라이크 3개 = 아웃, 볼 4개 = 볼넷입니다.</p>
+<p>💥 안타·2루타·홈런으로 점수를 얻고 3이닝 뒤 승부합니다.</p>
+<hr>
+<h2>게임 모드</h2>
+<h2>게임 모드</h2>
+<button onclick="start('pvp')">👥 2인 대결</button>
+<button onclick="start('bot')">🤖 봇과 대결</button>
+<p class="small">처음에는 3이닝으로 빠르게 즐길 수 있어요.</p>
+</div>
+
+<div id="game" class="hidden">
+<div class="card">
+<div class="score">이닝 <span id="inning">1</span> / 3　 |　 <span id="aScore">0</span> : <span id="bScore">0</span></div>
+<div id="turn"></div>
+<div id="count">볼 0　 스트라이크 0</div><div id="baseStatus" class="small">주자: 없음</div>
+</div>
+
+<div class="field" id="field">
+<div class="diamond"></div>
+<div class="base home">H</div><div class="base first">1</div><div class="base second">2</div><div class="base third">3</div>
+<div id="pitcherAvatar" style="position:absolute;left:calc(50% - 18px);top:205px;font-size:34px">🧢</div>
+<div id="batterAvatar" style="position:absolute;left:calc(50% - 18px);top:275px;font-size:34px">🏏</div>
+<div id="ball" style="position:absolute;display:none;font-size:24px;z-index:5">⚾</div>
+</div>
+
+<div class="players">
+<div id="pitcher" class="card">
+<h2>⚾ 1P 투수 화면</h2>
+<p>구종을 선택한 뒤 9칸 중 원하는 위치를 눌러 공을 던지세요.</p>
+<div>
+<button onclick="choosePitch('직구')">직구</button>
+<button onclick="choosePitch('커브')">커브</button>
+<button onclick="choosePitch('슬라이더')">슬라이더</button>
+<button onclick="choosePitch('체인지업')">체인지업</button>
+</div>
+<div class="pitchzone" id="pitchzone"></div>
+<p id="pitchMsg">구종과 위치를 골라 주세요.</p>
+</div>
+
+<div id="batter" class="card hidden">
+<h2>🏏 2P 타자 화면</h2>
+<p>공이 날아오면 타이밍을 보고 스윙하세요.</p>
+<div id="meter"><div id="meterbar"></div></div>
+<button onclick="swing(false)">일반 스윙</button>
+<button onclick="swing(true)">💥 강타</button>
+<button onclick="take()">기다리기</button>
+<button onclick="steal()">🏃 도루</button>
+<p class="small">스윙은 공이 날아오는 순간에 맞춰 누르세요. 주자가 있으면 도루를 시도할 수 있어요.</p>
+</div>
+</div>
+
+<div class="card">
+<div id="log" class="log">경기를 시작하세요!</div>
+<button onclick="location.reload()">🔄 다시 시작</button>
+</div>
+</div>
+</div>
+
+<script>
+let mode='pvp', inning=1, half=0, scores=[0,0], balls=0,strikes=0;
+let pitch=null, pitchTimer=null, targetZone=5;
+let bases=[false,false,false];
+
+function start(m){
+ mode=m; document.getElementById('menu').classList.add('hidden');
+ document.getElementById('game').classList.remove('hidden'); update();
+}
+
+function update(){
+ document.querySelectorAll('#pitchzone .zone').forEach(b=>b.disabled=false);
+ document.getElementById('inning').textContent=inning;
+ document.getElementById('aScore').textContent=scores[0];
+ document.getElementById('bScore').textContent=scores[1];
+ document.getElementById('count').textContent=`볼 ${balls}　 스트라이크 ${strikes}`;
+ let bs=bases.map((v,i)=>v?['1루','2루','3루'][i]:null).filter(Boolean); document.getElementById('baseStatus').textContent='주자: '+(bs.length?bs.join(', '):'없음');
+ let pitcherName=half===0?'1P':'2P';
+ if(mode==='bot' && half===1) pitcherName='🤖 봇';
+ document.getElementById('turn').textContent=`${inning}이닝 ${half===0?'초':'말'} — ${pitcherName} 투수`;
+ document.getElementById('pitcher').classList.toggle('hidden', mode==='bot'&&half===1);
+ document.getElementById('batter').classList.toggle('hidden', mode==='bot'&&half===0);
+ document.querySelector('#pitcher h2').textContent = mode==='pvp'
+   ? (half===0 ? '⚾ 1P 투수 화면' : '⚾ 2P 투수 화면') : '⚾ 투수 화면';
+ document.querySelector('#batter h2').textContent = mode==='pvp'
+   ? (half===0 ? '🏏 2P 타자 화면' : '🏏 1P 타자 화면') : '🏏 타자 화면';
+ makeZones();
+}
+function makeZones(){
+ const z=document.getElementById('pitchzone'); z.innerHTML='';
+ for(let i=1;i<=9;i++){let b=document.createElement('button');b.className='zone';b.textContent=i;b.onclick=()=>pitchZone(i);z.appendChild(b)}
+}
+function choosePitch(type){pitch=type;document.getElementById('pitchMsg').textContent='⚾ '+type+' 선택! 아래 9칸 중 공을 던질 위치를 누르세요.'}
+function pitchZone(z){
+ if(!pitch){
+   document.getElementById('pitchMsg').textContent='⚠️ 먼저 구종을 선택하세요!';
+   return;
+ }
+ targetZone=z;
+ document.getElementById('pitchMsg').textContent='⚾ 투수가 '+pitch+'을(를) 던집니다!';
+ const zoneButtons=document.querySelectorAll('#pitchzone .zone');
+ zoneButtons.forEach(b=>b.disabled=true);
+
+ const ball=document.getElementById('ball');
+ ball.style.display='block';
+ ball.style.left='calc(50% - 10px)';
+ ball.style.top='205px';
+
+ let start=performance.now(), duration=900;
+ function fly(now){
+   let t=Math.min(1,(now-start)/duration);
+   let eased=t*t*(3-2*t);
+   ball.style.left='calc(50% - 10px)';
+   ball.style.top=(205+70*eased)+'px';
+   if(t<1){
+     requestAnimationFrame(fly);
+   }else{
+     ball.style.display='none';
+     zoneButtons.forEach(b=>b.disabled=false);
+     if(mode==='bot'&&half===0){
+       setTimeout(()=>botBatter(),100);
+     }else{
+       document.getElementById('batter').classList.remove('hidden');
+       startMeter();
+     }
+   }
+ }
+ requestAnimationFrame(fly);
+}
+
+function startMeter(){
+ let bar=document.getElementById('meterbar'), x=0, dir=1;
+ clearInterval(pitchTimer); pitchTimer=setInterval(()=>{x+=dir*5;if(x>=100||x<=0)dir*=-1;bar.style.width=x+'%'},45);
+}
+function botBatter(){
+ let r=Math.random();
+ if(r<.68) resolveHit(Math.random()<.22);
+ else resolveTake();
+}
+function swing(power){
+ clearInterval(pitchTimer);
+ let bar=parseFloat(document.getElementById('meterbar').style.width)||50;
+ let timing=Math.abs(75-bar);
+ let chance=(timing<18?0.8:timing<35?0.48:0.2);
+ if(power) chance*=0.82;
+ if(Math.random()>chance){strikes++; log('헛스윙! 스트라이크'); afterPitch();return}
+ resolveHit(power);
+}
+function take(){clearInterval(pitchTimer);resolveTake()}
+function resolveTake(){
+ let ballOutside = ![2,4,5,6,8].includes(targetZone) || Math.random()<0.25;
+ if(ballOutside){balls++;log('볼!');}else{strikes++;log('스트라이크!')}
+ afterPitch();
+}
+function resolveHit(power=false){
+ let r=Math.random();
+ let result;
+ if(r<.10)result='홈런';
+ else if(r<.27)result='2루타';
+ else if(r<.63)result='안타';
+ else if(r<.78)result='파울';
+ else result='아웃';
+ if(power&&result==='안타'&&Math.random()<.45)result='2루타';
+ if(result==='파울'){strikes=Math.min(2,strikes+1);log('파울!');afterPitch();return}
+ if(result==='아웃'){log('아웃!');changeHalf();return}
+ if(result==='홈런'){let n=1+bases.filter(Boolean).length;scores[half]+=n;bases=[false,false,false];log(`💥 홈런! ${n}점!`);afterPitch(true);return}
+ if(result==='2루타'){advance(2);log('장타! 2루타!');}
+ else {advance(1);log('안타!');}
+ afterPitch(true);
+}
+function advance(n){
+ for(let i=2;i>=0;i--) if(bases[i]){
+   let to=i+n;
+   if(to>=3)scores[half]++;
+   else bases[to]=true;
+   bases[i]=false;
+ }
+ bases[n-1]=true;
+}
+function afterPitch(hit=false){
+ document.getElementById('batter').classList.add('hidden');
+ balls=hit?0:balls; strikes=hit?0:strikes;
+ if(balls>=4){scores[half]++;balls=0;strikes=0;log('볼넷! 1점이 추가됩니다.');}
+ if(strikes>=3){changeHalf();return}
+ update();
+ if(mode==='bot'&&half===0) setTimeout(botPitch,500);
+}
+function changeHalf(){
+ balls=0;strikes=0;bases=[false,false,false];
+ document.getElementById('batter').classList.add('hidden');
+ if(half===0){half=1;log('공수 교대!');update();if(mode==='bot')setTimeout(botPitch,500)}
+ else{
+   half=0;inning++;
+   if(inning>3){endGame();return}
+   log('공수 교대!');update();
+ }
+}
+
+function animatePitch(callback){
+ const ball=document.getElementById('ball');
+ ball.style.display='block';
+ ball.style.left='calc(50% - 10px)';
+ ball.style.top='205px';
+ const start=performance.now(), duration=650;
+ function step(now){
+   const t=Math.min(1,(now-start)/duration);
+   ball.style.left='calc(50% - 10px)';
+   ball.style.top=(205+70*t)+'px';
+   if(t<1) requestAnimationFrame(step);
+   else { ball.style.display='none'; callback(); }
+ }
+ requestAnimationFrame(step);
+}
+
+function steal(){
+ if(!bases.some(Boolean)){log('🏃 도루할 주자가 없습니다!');return;}
+ if(Math.random()<0.62){
+   if(bases[2]){scores[half]++;bases[2]=false;log('🏃 홈 도루 성공! 1점!');}
+   else if(bases[1]){bases[2]=true;bases[1]=false;log('🏃 3루 도루 성공!');}
+   else if(bases[0]){bases[1]=true;bases[0]=false;log('🏃 2루 도루 성공!');}
+ }else{
+   log('🚫 도루 실패! 주자가 아웃되었습니다.');
+   if(bases[2])bases[2]=false;else if(bases[1])bases[1]=false;else bases[0]=false;
+ }
+ update();
+}
+
+function botPitch(){
+ let types=['직구','커브','슬라이더','체인지업'];
+ pitch=types[Math.floor(Math.random()*types.length)];
+ targetZone=1+Math.floor(Math.random()*9);
+ document.getElementById('pitchMsg').textContent='🤖 봇이 '+pitch+'을 던졌습니다!';
+ animatePitch(()=>{ startMeter(); document.getElementById('batter').classList.remove('hidden'); });
+}
+function endGame(){
+ document.getElementById('pitcher').classList.add('hidden');document.getElementById('batter').classList.add('hidden');
+ let text=scores[0]===scores[1]?'🤝 무승부!':scores[0]>scores[1]?'🏆 1P 승리!':'🏆 2P 승리!';
+ document.getElementById('turn').textContent='경기 종료';
+ log(`${text} 최종 점수 ${scores[0]} : ${scores[1]}`);
+}
+function log(t){document.getElementById('log').textContent=t}
+</script>
+</body>
+</html>
